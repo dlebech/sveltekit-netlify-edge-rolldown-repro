@@ -1,54 +1,40 @@
-# sv
+# adapter-netlify 7: edge build fails on bare Node built-ins and `.wasm` imports
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Minimal reproduction for `@sveltejs/adapter-netlify@7.0.0` with `edge: true`.
 
-## Creating a project
+Created with `npx sv@1.1.0 create --template minimal --no-types --add sveltekit-adapter="adapter:netlify"`, then:
 
-If you're seeing this, you've probably already done this step. Congrats!
+- `vite.config.js`: `adapter({ edge: true })`
+- `src/routes/+page.server.js`: imports `crypto` (bare, no `node:` prefix), as many dependencies do
+- `src/routes/wasm/+server.js`: uses `wasm-lib`, a tiny local package that does `import('./add.wasm')`
+  (the pattern used by e.g. resvg/satori-based OG image libraries). `add.wasm` exports `add(a, b)`.
+  `.npmrc` has `install-links=true` so it is installed as a real copy in `node_modules`, like a published package.
 
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@1.1.0 create --template minimal --no-types --add sveltekit-adapter="adapter:netlify" --install npm sveltekit-netlify-edge-rolldown-repro
-```
-
-## Adding features
-
-Add features to your project with `sv add`:
+## Reproduce
 
 ```sh
-npx sv add
-```
-
-For example, to add Tailwind CSS:
-
-```sh
-npx sv add tailwindcss
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
+npm install
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+## Result
+
+```
+> Using @sveltejs/adapter-netlify
+Generating edge functions...
+error during build:
+Error: Build failed with 2 errors:
+
+[RESOLVE_ERROR] Could not resolve 'crypto' in .svelte-kit/output/server/entries/pages/_page.server.js
+ 1 │ import { createHash } from "crypto";
+   │                                ╰───── Matched alias not found for 'crypto'
+   │ Help 1: Maybe you expected `resolve.alias` to call other plugins resolveId hook? ...
+
+[PARSE_ERROR] Invalid Character ` `
+   ╭─[ node_modules/wasm-lib/add.wasm:1:1 ]
+```
+
+## Expected
+
+The build succeeds, as it does with `@sveltejs/kit@2` + `@sveltejs/adapter-netlify@6.0.4` (esbuild),
+where `crypto` is rewritten to `node:crypto` and `add.wasm` is copied next to the edge function.
